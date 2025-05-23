@@ -1,0 +1,21 @@
+
+Write K8s manifests to deploy cardano-node and cardano-db-sync. 
+You can use testnet-preprod network. 
+
+Cardano Node needs to be restored from mithril for fast bootstrapping. 
+
+You should use pre-built binaries or Docker images as building from source can take a few hours.
+
+Bonus point: Make them auto-scalable
+
+Submission: Create a Github repo or gist containing the code and send the link to diepntb@minswap.org/ careers@minswap.org
+
+You can discuss the solution with me via Telegram: @longminswap
+
+node        https://github.com/IntersectMBO/cardano-node
+db-sync     https://github.com/IntersectMBO/cardano-db-sync
+mithril     https://github.com/input-output-hk/
+
+
+https://forum.cardano.org/t/how-i-run-cardano-node-in-docker/108328
+Làm theo hd này đã chạy được pre
