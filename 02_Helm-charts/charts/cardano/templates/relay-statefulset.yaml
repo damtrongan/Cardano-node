@@ -1,0 +1,287 @@
+{{- $fullName := include "cardano.fullname" . }}
+
+apiVersion: {{ include "common.capabilities.statefulset.apiVersion" . }}
+kind: StatefulSet
+metadata:
+  name: "{{ include "cardano.fullname" . }}-relay"
+  labels:
+    app.kubernetes.io/component: relay
+    {{- include "cardano.labels" . | nindent 4 }}
+  annotations:
+    checkov.io/skip1: CKV_K8S_28="NET_RAW"
+    checkov.io/skip2: CKV_K8S_37="admission of containers with capabilities."
+  {{- if .Values.commonAnnotations }}
+  {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "cardano.fullname" . }}-headless
+  replicas: {{ .Values.relay.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: relay
+      {{- include "cardano.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- if eq .Values.environment.name "preview" }}
+        checksum/preview: {{ include (print $.Template.BasePath "/preview-configmap.yaml") . | sha256sum }}
+{{- end }}
+{{- if eq .Values.environment.name "testnet" }}
+        checksum/testnet: {{ include (print $.Template.BasePath "/testnet-configmap.yaml") . | sha256sum }}
+{{- end }}
+{{- if eq .Values.environment.name "mainnet" }}
+        checksum/mainnet: {{ include (print $.Template.BasePath "/mainnet-configmap.yaml") . | sha256sum }}
+{{- end }}
+    {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      labels:
+        app.kubernetes.io/component: relay
+        {{- include "cardano.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.relay.affinity }}
+      affinity: {{- include "common.tplvalues.render" (dict "value" .Values.relay.affinity "context" $) | nindent 8 }}
+      {{- else }}
+      affinity:
+        podAffinity: {{- include "common.affinities.pods" (dict "type" .Values.relay.podAffinityPreset "component" "relay" "context" $) | nindent 10 }}
+        podAntiAffinity: {{- include "common.affinities.pods" (dict "type" .Values.relay.podAntiAffinityPreset "component" "relay" "context" $) | nindent 10 }}
+        nodeAffinity: {{- include "common.affinities.nodes" (dict "type" .Values.relay.nodeAffinityPreset.type "key" .Values.relay.nodeAffinityPreset.key "values" .Values.relay.nodeAffinityPreset.values) | nindent 10 }}
+      {{- end }}
+      {{- if .Values.relay.nodeSelector }}
+      nodeSelector: {{- include "common.tplvalues.render" (dict "value" .Values.relay.nodeSelector "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.relay.tolerations }}
+      tolerations: {{- include "common.tplvalues.render" (dict "value" .Values.relay.tolerations "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.relay.spreadConstraints }}
+      topologySpreadConstraints: {{- include "common.tplvalues.render" (dict "value" .Values.relay.spreadConstraints "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.relay.shareProcessNamespace }}
+      shareProcessNamespace: {{ .Values.relay.shareProcessNamespace }}
+      {{- end }}
+      {{- if .Values.relay.schedulerName }}
+      schedulerName: {{ .Values.relay.schedulerName | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.relay.terminationGracePeriodSeconds }}
+
+      initContainers:
+        - name: genesis
+          securityContext:
+            {{- toYaml .Values.relay.securityContext | nindent 12 }}
+          image: "{{ .Values.busybox.repository }}:{{ .Values.busybox.tag }}"
+          imagePullPolicy: {{ .Values.busybox.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - cp /config/*-genesis.json.gz /genesis ;
+              gunzip /genesis/*.gz ;
+              cp /config/relay-config.json /genesis/config.json ;
+              cp /config/relay-topology.json /genesis/topology.json ;
+          volumeMounts:
+            - name: genesis
+              mountPath: /genesis
+            - name: config
+              mountPath: /config
+              readOnly: true
+
+        {{- if eq .Values.environment.name "mainnet" }}
+        # See cardano-node issue 3238. Genesis file is too large to fit in etcd (1 MB limit)
+        - name: genesis-large
+          securityContext:
+            {{- toYaml .Values.relay.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - cp /nix/store/iwq90igv72ihdr9z9nl3m0dsiv0bfh7y-byron-genesis.json /genesis/byron-genesis.json ;
+          volumeMounts:
+            - name: genesis
+              mountPath: /genesis
+        {{- end }}
+        {{- if and .Values.persistence.enabled .Values.persistence.sourceFile.enabled }}
+        - name: restore
+          securityContext:
+            {{- toYaml .Values.relay.securityContext | nindent 12 }}
+          image: "{{ .Values.curl.repository }}:{{ .Values.curl.tag }}"
+          imagePullPolicy: {{ .Values.curl.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - set -e ;
+              if [ -d "{{ .Values.persistence.mountPath }}/db" ]; then
+                exit 0 ;
+              fi ;
+              cd "{{ .Values.persistence.mountPath }}" && curl -o - "{{ .Values.persistence.sourceFile.url }}" | lz4 -c -d - | tar -x ;
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+              subPath: {{ .Values.persistence.subPath }}
+        {{- end }} 
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "1"  # if there are any dots in a name, the name will be tried first as an absolute name before any search list elements are appended to it.
+      containers:
+
+        - name: node
+          securityContext:
+            {{- toYaml .Values.relay.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - set -e ;
+              $(readlink -e /nix/store/*-cardano-node-exe-*/bin/cardano-node)
+              run
+              --config /config/config.json
+              --topology /config/topology.json
+              --database-path /data/db
+              --host-addr 0.0.0.0
+              --port 3001
+              --socket-path /ipc/node.socket
+              {{ .Values.relay.extraFlags }} ;
+          volumeMounts:
+            - name: readiness-probe
+              mountPath: /opt/readiness.sh
+              subPath: readiness.sh
+            - name: node-ipc
+              mountPath: /ipc
+            - name: genesis
+              mountPath: /config
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+              subPath: {{ .Values.persistence.subPath }}
+            {{- end }}
+          ports:
+            - name: node
+              containerPort: 3001
+              protocol: TCP
+            - name: metrics
+              containerPort: 12789
+              protocol: TCP
+          env:
+          - name: "CARDANO_NODE_SOCKET_PATH"
+            value: /ipc/node.socket
+
+          {{- if .Values.relay.startupProbe.enabled }}
+          startupProbe:
+            tcpSocket:
+              port: 3001
+            initialDelaySeconds: {{ .Values.relay.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.relay.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ add1 .Values.relay.startupProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.relay.startupProbe.successThreshold }}
+            failureThreshold: {{ .Values.relay.startupProbe.failureThreshold}}
+          {{- end }}
+          {{- if .Values.relay.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - stat /ipc/node.socket
+            initialDelaySeconds: {{ .Values.relay.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.relay.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ add1 .Values.relay.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.relay.livenessProbe.successThreshold }}
+            failureThreshold: {{ .Values.relay.livenessProbe.failureThreshold}}
+          {{- end }}
+          {{- if .Values.relay.readinessProbe.enabled }}
+          readinessProbe:
+            initialDelaySeconds: {{ .Values.relay.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.relay.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ add1 .Values.relay.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.relay.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.relay.readinessProbe.failureThreshold }}
+            tcpSocket:
+              port: 3001
+          {{- end }}
+          resources:
+            {{- toYaml .Values.relay.resources | nindent 12 }}
+
+        {{- if .Values.ogmios.enabled }}
+        - name: ogmios
+          securityContext:
+            {{- toYaml .Values.ogmios.securityContext | nindent 12 }}
+          image: "{{ .Values.ogmios.repository }}:{{ .Values.ogmios.tag }}"
+          imagePullPolicy: {{ .Values.ogmios.pullPolicy }}
+          args:
+            - --host
+            - 0.0.0.0
+            - --node-config
+            - /config/config.json
+            - --node-socket
+            - /ipc/node.socket
+          volumeMounts:
+            - name: node-ipc
+              mountPath: /ipc
+            - name: genesis
+              mountPath: /config
+          ports:
+            - name: ogmios
+              containerPort: 1337
+              protocol: TCP
+          {{- if .Values.ogmios.readinessProbe.enabled }}
+          readinessProbe:
+            initialDelaySeconds: {{ .Values.ogmios.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.ogmios.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ add1 .Values.ogmios.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.ogmios.readinessProbe.successThreshold }}
+            failureThreshold: {{ .Values.ogmios.readinessProbe.failureThreshold }}
+            httpGet:
+              path: /health
+              port: 1337
+          {{- end }}
+          resources:
+            {{- toYaml .Values.ogmios.resources | nindent 12 }}
+        {{- end }}
+
+      volumes:
+        - name: readiness-probe
+          configMap:
+            name: {{ template "cardano.configName" . }}-{{ .Values.environment.name }}
+        - name: genesis
+          emptyDir: {}
+        - name: node-ipc
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ template "cardano.configName" . }}-{{ .Values.environment.name }}
+{{- if and .Values.persistence.enabled .Values.persistence.existingClaim }}
+        - name: data
+          persistentVolumeClaim:
+{{- with .Values.persistence.existingClaim }}
+            claimName: {{ tpl . $ }}
+{{- end }}
+{{- else if not .Values.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+{{- else if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      {{- with .Values.persistence.annotations }}
+        annotations:
+        {{- range $key, $value := . }}
+          {{ $key }}: {{ $value }}
+        {{- end }}
+      {{- end }}
+      spec:
+        accessModes:
+        {{- range .Values.persistence.accessModes }}
+          - {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | quote }}
+        {{ include "common.storage.class" (dict "persistence" .Values.persistence "global" .Values.global) }}
+        {{- if .Values.persistence.selector }}
+        selector: {{- include "common.tplvalues.render" (dict "value" .Values.persistence.selector "context" $) | nindent 10 }}
+        {{- end -}}
+{{- end }}

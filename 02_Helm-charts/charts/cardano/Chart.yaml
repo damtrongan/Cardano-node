@@ -1,0 +1,14 @@
+apiVersion: v2
+name: cardano
+description: A Cardano Helm chart for Kubernetes
+
+type: application
+
+version: 0.4.2
+
+appVersion: 1.35.4
+
+dependencies:
+  - name: common
+    repository: https://charts.bitnami.com/bitnami
+    version: 1.17.1  # include "common.capabilities.cronjob.apiVersion" macro

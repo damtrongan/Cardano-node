@@ -1,0 +1,40 @@
+
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+Your Cardano network is {{ .Values.environment.name }}
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }}
+  $ helm get all {{ .Release.Name }}
+
+{{- if contains "LoadBalancer" .Values.service.type }}
+
+Your external IP is exposed via a Load Balancer.
+
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+        You can watch the status of by running 'kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "cardano.fullname" . }}'
+  $ export SERVICE_IP=$(kubectl get svc --namespace {{ .Release.Namespace }} {{ include "cardano.fullname" . }} --template "{{"{{ range (index .status.loadBalancer.ingress 0) }}{{.}}{{ end }}"}}")
+  $ echo "Your public node address is: $SERVICE_IP:{{ .Values.service.port }}"
+
+{{- end }}
+
+Your  node must be fully synchronized with the blockchain. This can take several hours if this is the first installation of the Chart, so please be patient.
+
+To query the blockchain tip, try:
+
+{{- if eq .Values.environment.name "mainnet" }}
+  $ kubectl exec -ti -n {{ .Release.Namespace }} {{ include "cardano.fullname" . }}-relay-0 -c node -- cardano-cli query tip --mainnet
+{{- else }}
+  $ kubectl exec -ti -n {{ .Release.Namespace }} {{ include "cardano.fullname" . }}-relay-0 -c node -- cardano-cli query tip --testnet-magic {{ include "cardano.networkMagic" . }}
+{{- end }}
+
+{{- if .Values.ogmios.enabled }}
+
+Visit http://127.0.0.1:8080 to open the Ogmios interface. The interface can be used after forwarding port 1337 to localhost port 8080:
+
+  $ export POD_NAME=$(kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/component=relay" -o jsonpath="{.items[0].metadata.name}")
+  $ kubectl port-forward -n {{ .Release.Namespace }} $POD_NAME 8080:1337
+{{- end }}
