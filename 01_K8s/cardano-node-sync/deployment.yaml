@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cardano-node-db-sync
+  namespace: <your-namespace> # Change this
+  labels:
+    app: cardano-node-db-sync
+spec:
+  replicas: 1 # Typically only one replica for db-sync and node
+  selector:
+    matchLabels:
+      app: cardano-node-db-sync
+  template:
+    metadata:
+      labels:
+        app: cardano-node-db-sync
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: 133-worker-01
+      volumes:
+        # Volume for cardano-db-sync data
+        - name: db-sync-storage
+          persistentVolumeClaim:
+            claimName: db-sync-data-pvc
+        - name: node-ipc-socket
+          emptyDir: {} # Temporary, shared volume within the Pod
+
+        # You will also need volumes for your cardano-node config and database.
+        # Example for node config:
+        # - name: node-config
+        #   configMap:
+        #     name: cardano-node-config # A ConfigMap you'd create for node's config.json, topology.json etc.
+        # - name: node-db-data # For cardano-node's blockchain data
+        #   persistentVolumeClaim:
+        #     claimName: cardano-node-data-pvc # A PVC you'd create for cardano-node's data
+
+      containers:
+        - name: cardano-db-sync
+          image: ghcr.io/intersectmbo/cardano-db-sync:13.6.0.5
+          envFrom:
+            - configMapRef:
+                name: cardano-db-sync-config
+            - secretRef:
+                name: cardano-db-sync-secret
+          env:
+            - name: CARDANO_NODE_SOCKET_PATH
+              value: "/node-ipc/node.socket" # Important: Must match the node container's socket path
+
+          volumeMounts:
+            - name: db-sync-storage
+              mountPath: /var/lib/cexplorer # Matches the db-sync-data volume in docker-compose
+            - name: node-ipc-socket # Mount the shared IPC volume
+              mountPath: /node-ipc # Matches the node-ipc volume in docker-compose
+
+          restartPolicy: OnFailure

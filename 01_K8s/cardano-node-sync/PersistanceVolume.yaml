@@ -1,9 +1,24 @@
 apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: db-sync-data-pvc
+  namespace: testnet
+spec:
+  storageClassName: cardano-sc
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 20Gi
+
+---
+
+apiVersion: v1
 kind: PersistentVolume
 metadata:
   # To provide volumes for multiple nodes, this section is
   name: cardano-pv
-  namespace: cardano
+  namespace: testnet
   labels:
     app: cardano-preprod-node
     cardano-preprod-node-type: relay
@@ -14,8 +29,6 @@ spec:
     - ReadWriteOnce # Only allow one container to use this volume
   persistentVolumeReclaimPolicy: Delete
   storageClassName: cardano-sc
-  # Set the path to the folder on the node that will be mounted for this volume
-  # This volume is on the host named "k8snode1"
   local:
     path: /data/cardano/preprod
   nodeAffinity:
@@ -26,7 +39,7 @@ spec:
           - key: kubernetes.io/hostname
             operator: In
             values:
-              - 133-worker-01 # hostname for this volume
+              - 133-worker-01
 
 ---
 apiVersion: storage.k8s.io/v1
@@ -37,12 +50,3 @@ spec: {}
   provisioner: kubernetes.io/no-provisioner
   reclaimPolicy: Retain
   volumeBindingMode: WaitForFirstConsumer
-
-# apiVersion: storage.k8s.io/v1
-# kind: StorageClass
-# metadata:
-#   name: local-storage-mainnet-relay
-# provisioner: kubernetes.io/no-provisioner
-# # Docs say that local bindings should be set to WaitForFirstConsumer.
-# # https://kubernetes.io/docs/concepts/storage/storage-classes/#local
-# volumeBindingMode: WaitForFirstConsumer

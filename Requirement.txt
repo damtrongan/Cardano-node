@@ -8,14 +8,11 @@ You should use pre-built binaries or Docker images as building from source can t
 
 Bonus point: Make them auto-scalable
 
-Submission: Create a Github repo or gist containing the code and send the link to diepntb@minswap.org/ careers@minswap.org
+Submission: Create a Github repo or gist containing the code and send the 
+link to diepntb@minswap.org/ careers@minswap.org
 
 You can discuss the solution with me via Telegram: @longminswap
 
 node        https://github.com/IntersectMBO/cardano-node
 db-sync     https://github.com/IntersectMBO/cardano-db-sync
 mithril     https://github.com/input-output-hk/
-
-
-https://forum.cardano.org/t/how-i-run-cardano-node-in-docker/108328
-Làm theo hd này đã chạy được pre

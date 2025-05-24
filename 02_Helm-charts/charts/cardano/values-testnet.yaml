@@ -31,6 +31,11 @@ curl:
   pullPolicy: IfNotPresent
   tag: "0.0.3"
 
+dbsync:
+  repository: IntersectMBO/cardano-db-sync
+  pullPolicy: IfNotPresent
+  tag: "13.3.0.0"
+
 liveness:
   repository: alpine
   pullPolicy: IfNotPresent

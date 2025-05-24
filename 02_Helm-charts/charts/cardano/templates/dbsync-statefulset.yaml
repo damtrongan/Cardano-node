@@ -1,0 +1,124 @@
+{{- $fullName := include "cardano.fullname" . }}
+
+apiVersion: {{ include "common.capabilities.statefulset.apiVersion" . }}
+kind: StatefulSet
+metadata:
+  name: "{{ include "cardano.fullname" . }}-dbsync"
+  labels:
+    app.kubernetes.io/component: dbsync
+    {{- include "cardano.labels" . | nindent 4 }}
+  annotations:
+    checkov.io/skip1: CKV_K8S_28="NET_RAW"
+    checkov.io/skip2: CKV_K8S_37="admission of containers with capabilities."
+  {{- if .Values.commonAnnotations }}
+  {{- include "common.tplvalues.render" ( dict "value" .Values.commonAnnotations "context" $ ) | nindent 4 }}
+  {{- end }}
+spec:
+  serviceName: {{ include "cardano.fullname" . }}-headless
+  replicas: {{ .Values.dbsync.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: dbsync
+      {{- include "cardano.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+{{- if eq .Values.environment.name "preview" }}
+        checksum/preview: {{ include (print $.Template.BasePath "/preview-configmap.yaml") . | sha256sum }}
+{{- end }}
+{{- if eq .Values.environment.name "testnet" }}
+        checksum/testnet: {{ include (print $.Template.BasePath "/testnet-configmap.yaml") . | sha256sum }}
+{{- end }}
+{{- if eq .Values.environment.name "mainnet" }}
+        checksum/mainnet: {{ include (print $.Template.BasePath "/mainnet-configmap.yaml") . | sha256sum }}
+{{- end }}
+    {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      labels:
+        app.kubernetes.io/component: dbsync
+        {{- include "cardano.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      automountServiceAccountToken: false
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- if .Values.dbsync.affinity }}
+      affinity: {{- include "common.tplvalues.render" (dict "value" .Values.dbsync.affinity "context" $) | nindent 8 }}
+      {{- else }}
+      affinity:
+        podAffinity: {{- include "common.affinities.pods" (dict "type" .Values.dbsync.podAffinityPreset "component" "dbsync" "context" $) | nindent 10 }}
+        podAntiAffinity: {{- include "common.affinities.pods" (dict "type" .Values.dbsync.podAntiAffinityPreset "component" "dbsync" "context" $) | nindent 10 }}
+        nodeAffinity: {{- include "common.affinities.nodes" (dict "type" .Values.dbsync.nodeAffinityPreset.type "key" .Values.dbsync.nodeAffinityPreset.key "values" .Values.dbsync.nodeAffinityPreset.values) | nindent 10 }}
+      {{- end }}
+      {{- if .Values.dbsync.nodeSelector }}
+      nodeSelector: {{- include "common.tplvalues.render" (dict "value" .Values.dbsync.nodeSelector "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dbsync.tolerations }}
+      tolerations: {{- include "common.tplvalues.render" (dict "value" .Values.dbsync.tolerations "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dbsync.spreadConstraints }}
+      topologySpreadConstraints: {{- include "common.tplvalues.render" (dict "value" .Values.dbsync.spreadConstraints "context" $) | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dbsync.shareProcessNamespace }}
+      shareProcessNamespace: {{ .Values.dbsync.shareProcessNamespace }}
+      {{- end }}
+      {{- if .Values.dbsync.schedulerName }}
+      schedulerName: {{ .Values.dbsync.schedulerName | quote }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ .Values.dbsync.terminationGracePeriodSeconds }}
+
+      containers:
+
+        - name: dbsync
+          securityContext:
+            {{- toYaml .Values.relay.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - set -e ;
+              $(readlink -e /nix/store/*-cardano-node-exe-*/bin/cardano-node)
+              run
+              --database-path /data/db
+              --host-addr 0.0.0.0
+              --port 3001
+              --socket-path /ipc/node.socket
+              {{ .Values.relay.extraFlags }} ;
+          volumeMounts:
+            - name: readiness-probe
+              mountPath: /opt/readiness.sh
+              subPath: readiness.sh
+            - name: node-ipc
+              mountPath: /ipc
+            - name: genesis
+              mountPath: /config
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath }}
+              subPath: {{ .Values.persistence.subPath }}
+            {{- end }}
+          ports:
+            - name: node
+              containerPort: 3001
+              protocol: TCP
+            - name: metrics
+              containerPort: 12789
+              protocol: TCP
+          env:
+          - name: "CARDANO_NODE_SOCKET_PATH"
+            value: /ipc/node.socket
+      volumes:
+        - name: readiness-probe
+          configMap:
+            name: {{ template "cardano.configName" . }}-{{ .Values.environment.name }}
+        - name: genesis
+          emptyDir: {}
+        - name: node-ipc
+          emptyDir: {}
+        - name: config
+          configMap:
+            name: {{ template "cardano.configName" . }}-{{ .Values.environment.name }}
