@@ -31,10 +31,10 @@ spec:
               mountPath: /data
           # My configuration lives inside the mounted /data folder, and that's also where
           # the db data should be written
-          args: ["run", "--config", "/data/cardano/preprod/config.json",
-           "--topology", "/data/cardano/preprod/topology.json",
-           "--database-path", "/data/db",
+          args: ["run", 
+           "--topology", "/data/topology.json",
            "--socket-path", "/data/node.socket",
+           "--database-path", "/data/db",
            "--port", "4000"]
   volumeClaimTemplates:
     - metadata:
