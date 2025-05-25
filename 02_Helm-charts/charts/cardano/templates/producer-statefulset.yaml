@@ -92,7 +92,6 @@ spec:
               mountPath: /config
               readOnly: true
         {{- if eq .Values.environment.name "mainnet" }}
-        # See cardano-node issue 3238. Genesis file is too large to fit in etcd (1 MB limit)
         - name: genesis-large
           securityContext:
             {{- toYaml .Values.producer.securityContext | nindent 12 }}
@@ -105,26 +104,6 @@ spec:
             - name: genesis
               mountPath: /genesis
         {{- end }}
-        # https://github.com/kubernetes/kubernetes/issues/81089
-        # - name: set-key-ownership  # remove all "other" file permissions else node fails to start
-        #   securityContext:
-        #     runAsNonRoot: false
-        #     runAsUser: 0
-        #     readOnlyRootFilesystem: true
-        #   image: "{{- .Values.busybox.repository -}}:{{- .Values.busybox.tag -}}"
-        #   imagePullPolicy: {{ .Values.busybox.pullPolicy }}
-        #   command: ["sh", "-c"]
-        #   args:
-        #     - cp /root-key/* /key ;
-        #       chown -R {{ .Values.podSecurityContext.runAsUser }}:{{ .Values.podSecurityContext.runAsGroup }} /key ;
-        #       find /key -type f -exec chmod 0400 {} \;
-        #   volumeMounts:
-        #   - mountPath: /key
-        #     name: vault
-        #   - mountPath: /root-key
-        #     name: root-vault
-        #     readOnly: true
-
         {{- if and .Values.persistence.enabled .Values.persistence.sourceFile.enabled }}
         - name: restore
           securityContext:
