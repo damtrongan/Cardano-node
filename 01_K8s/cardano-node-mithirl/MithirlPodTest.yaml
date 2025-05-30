@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mithril-bootstrap-deployment
+  labels:
+    app: mithril-bootstrap
+  namespace: testnet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mithril-bootstrap
+  template:
+    metadata:
+      labels:
+        app: mithril-bootstrap
+    spec:
+      volumes:
+        - name: cardano-preprod-mithril-pvc
+          persistentVolumeClaim:
+            claimName: cardano-preprod-mithril-pvc
+        - name: mithril-keys
+          configMap:
+            name: mithril-verification-keys
+      containers:
+        - name: mithril-bootstrap
+          image: ghcr.io/input-output-hk/mithril-client:main-e6135c6
+          env:
+            - name: AGGREGATOR_ENDPOINT
+              value: https://aggregator.release-preprod.api.mithril.network/aggregator
+            - name: GENESIS_VERIFICATION_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: mithril-verification-keys
+                  key: genesis.vkey
+            - name: ANCILLARY_VERIFICATION_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: mithril-verification-keys
+                  key: ancillary.vkey
+          args:
+            - cardano-db
+            - download
+            - latest
+            - --download-dir
+            - /data
+          volumeMounts:
+            - name: cardano-preprod-mithril-pvc
+              mountPath: /data
+            - name: mithril-keys
+              mountPath: /keys
