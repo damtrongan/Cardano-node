@@ -1,0 +1,96 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cardano-preprod-statefulset
+  labels:
+    app: cardano-preprod-statefulset
+    cardano-preprod-node-type: mithril-bootstrap
+  namespace: testnet
+spec:
+  serviceName: cardano-preprod
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cardano-preprod-node
+  template:
+    metadata:
+      labels:
+        app: cardano-preprod-node
+        cardano-preprod-node-type: mithril-bootstrap
+    spec:
+      volumes:
+        - name: cardano-preprod-mithril-config-pvc
+          persistentVolumeClaim:
+            claimName: cardano-preprod-mithril-config-pvc
+        - name: cardano-preprod-mithril-db-pvc
+          persistentVolumeClaim:
+            claimName: cardano-preprod-mithril-db-pvc
+        - name: mithril-keys
+          configMap:
+            name: mithril-verification-keys
+      initContainers:
+        - name: mithril-bootstrap
+          image: ghcr.io/input-output-hk/mithril-client:main-e6135c6
+          env:
+            - name: AGGREGATOR_ENDPOINT
+              value: https://aggregator.release-preprod.api.mithril.network/aggregator
+            - name: GENESIS_VERIFICATION_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: mithril-verification-keys
+                  key: genesis.vkey
+            - name: ANCILLARY_VERIFICATION_KEY
+              valueFrom:
+                configMapKeyRef:
+                  name: mithril-verification-keys
+                  key: ancillary.vkey
+          args:
+            - cardano-db
+            - download
+            - latest
+            - --download-dir
+            - /
+          volumeMounts:
+            - name: cardano-preprod-mithril-db-pvc
+              mountPath: /db
+            - name: mithril-keys
+              mountPath: /keys
+      containers:
+        - name: cardano-preprod-node
+          image: ghcr.io/intersectmbo/cardano-node:10.3.1
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: cardano-preprod-mithril-config-pvc
+              mountPath: /data
+            - name: cardano-preprod-mithril-db-pvc
+              mountPath: /db
+          args:
+            - run
+            - --topology
+            - /data/topology.json
+            - --database-path
+            - /data/db
+            - --socket-path
+            - /data/node.socket
+            - --config
+            - /data/config.json
+  volumeClaimTemplates:
+    - metadata:
+        name: cardano-preprod-mithril-config-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: cardano-config-sc
+        resources:
+          requests:
+            storage: 5Gi
+    - metadata:
+        name: cardano-preprod-mithril-db-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: cardano-db-sc
+        resources:
+          requests:
+            storage: 25Gi

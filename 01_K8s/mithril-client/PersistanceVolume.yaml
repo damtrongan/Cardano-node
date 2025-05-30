@@ -1,32 +1,4 @@
 apiVersion: v1
-kind: PersistentVolume
-metadata:
-  # To provide volumes for multiple nodes, this section is
-  name: cardano-preprod-db-mithril-pv
-  labels:
-    app: cardano-preprod-node
-    cardano-preprod-node-type: mithril-bootstrap
-spec:
-  capacity:
-    storage: 25Gi
-  accessModes:
-    - ReadWriteOnce # Only allow one container to use this volume
-  persistentVolumeReclaimPolicy: Retain
-  storageClassName: cardano-db-sc
-  local:
-    path: /data/cardano/preprod/db
-  nodeAffinity:
-    required:
-      nodeSelectorTerms:
-        - matchExpressions:
-          # Restrict this volume to a specific Kubernetes node by hostname
-          - key: kubernetes.io/hostname
-            operator: In
-            values:
-              - 133-worker-01
-
----
-apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: cardano-preprod-db-mithril-pvc
