@@ -1,24 +1,22 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
 metadata:
-  name: mithril-bootstrap-deployment
+  name: mithril-bootstrap-job
+  namespace: testnet
   labels:
     app: mithril-bootstrap
-  namespace: testnet
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mithril-bootstrap
+  backoffLimit: 3
   template:
     metadata:
       labels:
         app: mithril-bootstrap
     spec:
+      restartPolicy: Never
       volumes:
-        - name: cardano-preprod-mithril-pvc
+        - name: cardano-preprod-db-mithril-pvc
           persistentVolumeClaim:
-            claimName: cardano-preprod-mithril-pvc
+            claimName: cardano-preprod-db-mithril-pvc
         - name: mithril-keys
           configMap:
             name: mithril-verification-keys
@@ -33,7 +31,7 @@ spec:
                 configMapKeyRef:
                   name: mithril-verification-keys
                   key: genesis.vkey
-            - name: ANCILLARY_VERIFICATION_KEY
+            - name: ancillary-verification-key
               valueFrom:
                 configMapKeyRef:
                   name: mithril-verification-keys
@@ -43,9 +41,10 @@ spec:
             - download
             - latest
             - --download-dir
-            - /data
+            - /db
+            - --include-ancillary
           volumeMounts:
-            - name: cardano-preprod-mithril-pvc
-              mountPath: /data
+            - name: cardano-preprod-db-mithril-pvc
+              mountPath: /db
             - name: mithril-keys
               mountPath: /keys

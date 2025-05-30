@@ -16,6 +16,7 @@ services:
         max-size: "200k"
         max-file: "10"
 
-# volumes:
-#   node-db:
-#   node-ipc:
+volumes:
+  node-db:
+  
+  node-ipc:

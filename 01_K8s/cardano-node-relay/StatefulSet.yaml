@@ -1,0 +1,46 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: cardano-preprod-deployment
+  labels:
+    app: cardano-preprod-deployment
+  namespace: testnet
+spec:
+  serviceName: cardano-preprod
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cardano-preprod-node
+  template:
+    metadata:
+      labels:
+        app: cardano-preprod-node
+    spec:
+      containers:
+        - name: cardano-preprod-relay
+          image: ghcr.io/intersectmbo/cardano-node:10.3.1
+          # Expose both the cardano-node port and the /metrics endpoint port.
+          ports:
+            - containerPort: 12798
+            - containerPort: 4000
+          # Mount the data volume at /data (see the Volume Claim below)
+          volumeMounts:
+            - name: cardano-relay-pvc
+              mountPath: /data
+          # My configuration lives inside the mounted /data folder, and that's also where
+          # the db data should be written
+          args: ["run", 
+           "--topology", "/data/topology.json",
+           "--socket-path", "/data/node.socket",
+           "--database-path", "/data/db",
+           "--port", "4000"]
+  volumeClaimTemplates:
+    - metadata:
+        name: cardano-relay-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: cardano-sc
+        resources:
+          requests:
+            storage: 20Gi

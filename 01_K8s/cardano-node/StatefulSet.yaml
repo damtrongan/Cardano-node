@@ -1,9 +1,9 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: cardano-preprod-deployment
+  name: cardano-preprod-statefulset
   labels:
-    app: cardano-preprod-deployment
+    app: cardano-preprod-node
   namespace: testnet
 spec:
   serviceName: cardano-preprod
@@ -11,38 +11,54 @@ spec:
   selector:
     matchLabels:
       app: cardano-preprod-node
-      cardano-preprod-node-type: relay
   template:
     metadata:
       labels:
         app: cardano-preprod-node
-        cardano-preprod-node-type: relay
     spec:
+      volumes:
+        - name: cardano-preprod-config-pvc
+          persistentVolumeClaim:
+            claimName: cardano-preprod-config-pvc
+        - name: cardano-preprod-db-pvc
+          persistentVolumeClaim:
+            claimName: cardano-preprod-db-pvc
       containers:
-        - name: cardano-preprod-relay
+        - name: cardano-preprod-node
           image: ghcr.io/intersectmbo/cardano-node:10.3.1
-          # Expose both the cardano-node port and the /metrics endpoint port.
           ports:
-            - containerPort: 12798
-            - containerPort: 4000
-          # Mount the data volume at /data (see the Volume Claim below)
+            - containerPort: 3000
           volumeMounts:
-            - name: cardano-relay-pvc
+            - name: cardano-preprod-config-pvc
               mountPath: /data
-          # My configuration lives inside the mounted /data folder, and that's also where
-          # the db data should be written
-          args: ["run", 
-           "--topology", "/data/topology.json",
-           "--socket-path", "/data/node.socket",
-           "--database-path", "/data/db",
-           "--port", "4000"]
+            - name: cardano-preprod-db-pvc
+              mountPath: /db
+          args:
+            - run
+            - --topology
+            - /data/topology.json
+            - --socket-path
+            - /data/node.socket
+            - --database-path
+            - /db
+            - --config
+            - /data/config.json
   volumeClaimTemplates:
     - metadata:
-        name: cardano-relay-pvc
+        name: cardano-preprod-config-pvc
       spec:
         accessModes:
           - ReadWriteOnce
-        storageClassName: cardano-sc
+        storageClassName: cardano-config-sc
         resources:
           requests:
-            storage: 20Gi
+            storage: 25Gi
+    - metadata:
+        name: cardano-preprod-db-pvc
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        storageClassName: cardano-db-sc
+        resources:
+          requests:
+            storage: 25Gi

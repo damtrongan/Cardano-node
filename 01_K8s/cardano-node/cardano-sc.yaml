@@ -1,7 +1,16 @@
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: cardano-sc
+  name: cardano-config-sc
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+
+
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: cardano-db-sc
 provisioner: kubernetes.io/no-provisioner
 reclaimPolicy: Retain
 volumeBindingMode: WaitForFirstConsumer

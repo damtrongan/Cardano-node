@@ -22,7 +22,7 @@ Get the tip:
 ```
 docker exec -ti preprod-relay /usr/local/bin/cardano-cli query tip --testnet-magic 2
 ```
-[testnet-magic](https://developers.cardano.org/docs/get-started/cardano-cli/get-started/)
+[Testnet-magic docs](https://developers.cardano.org/docs/get-started/cardano-cli/get-started/)
 
 
 Mainnet
